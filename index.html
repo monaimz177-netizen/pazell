@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Block Blast Telegram Pro</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/interact.js/1.10.11/interact.min.js"></script>
+    
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --grid-color: #1e293b;
+            --block-color: #38bdf8;
+            --accent-color: #fbbf24;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: white;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            touch-action: none;
+            user-select: none;
+        }
+
+        #ui-header {
+            width: 100%;
+            display: flex;
+            justify-content: space-around;
+            padding: 15px 0;
+            background: rgba(255, 255, 255, 0.05);
+            margin-bottom: 10px;
+        }
+
+        .stat-box { text-align: center; }
+        .stat-label { font-size: 12px; color: #94a3b8; }
+        .stat-value { font-size: 20px; font-weight: bold; color: var(--accent-color); }
+
+        #game-board {
+            display: grid;
+            grid-template-columns: repeat(8, 40px);
+            grid-template-rows: repeat(8, 40px);
+            gap: 4px;
+            background: #334155;
+            padding: 8px;
+            border-radius: 12px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+        }
+
+        .cell {
+            width: 40px;
+            height: 40px;
+            background: var(--grid-color);
+            border-radius: 4px;
+        }
+
+        .cell.filled {
+            background: var(--block-color);
+            box-shadow: inset 0 0 10px rgba(0,0,0,0.3);
+            animation: pop 0.2s ease-out;
+        }
+
+        @keyframes pop {
+            0% { transform: scale(0.8); }
+            100% { transform: scale(1); }
+        }
+
+        #dock {
+            margin-top: 30px;
+            display: flex;
+            gap: 20px;
+            height: 120px;
+        }
+
+        .piece {
+            display: grid;
+            grid-template-columns: repeat(3, 25px);
+            gap: 2px;
+            cursor: grab;
+        }
+
+        .p-block {
+            width: 25px;
+            height: 25px;
+            background: var(--accent-color);
+            border-radius: 3px;
+        }
+
+        .hidden { visibility: hidden; }
+    </style>
+</head>
+<body>
+
+    <div id="ui-header">
+        <div class="stat-box">
+            <div class="stat-label">اللاعب</div>
+            <div id="username" class="stat-value">زائر</div>
+        </div>
+        <div class="stat-box">
+            <div class="stat-label">النتيجة</div>
+            <div id="score" class="stat-value">0</div>
+        </div>
+        <div class="stat-box">
+            <div class="stat-label">الأعلى</div>
+            <div id="high-score" class="stat-value">0</div>
+        </div>
+    </div>
+
+    <div id="game-board"></div>
+
+    <div id="dock">
+        <div class="piece" id="piece-1" data-type="L">
+            <div class="p-block"></div><div class="p-block"></div><div class="p-block"></div>
+            <div class="p-block"></div><div></div><div></div>
+        </div>
+    </div>
+
+    <script>
+        const tg = window.Telegram.WebApp;
+        const DB_URL = "https://block-a0df2-default-rtdb/firebaseio.com/"; // رابط قاعدتك
+        
+        let score = 0;
+        let highScore = 0;
+        let userId = tg.initDataUnsafe?.user?.id || "guest";
+        let userName = tg.initDataUnsafe?.user?.first_name || "Guest";
+
+        document.getElementById('username').innerText = userName;
+
+        // 1. إنشاء اللوحة
+        const board = Array(8).fill().map(() => Array(8).fill(0));
+        const boardElement = document.getElementById('game-board');
+
+        for (let r = 0; r < 8; r++) {
+            for (let c = 0; c < 8; c++) {
+                const cell = document.createElement('div');
+                cell.className = 'cell';
+                cell.id = `cell-${r}-${c}`;
+                boardElement.appendChild(cell);
+            }
+        }
+
+        // 2. نظام السحب والإفلات
+        interact('.piece').draggable({
+            listeners: {
+                move(event) {
+                    const target = event.target;
+                    const x = (parseFloat(target.getAttribute('data-x')) || 0) + event.dx;
+                    const y = (parseFloat(target.getAttribute('data-y')) || 0) + event.dy;
+                    target.style.transform = `translate(${x}px, ${y}px) scale(1.2)`;
+                    target.setAttribute('data-x', x);
+                    target.setAttribute('data-y', y);
+                },
+                end(event) {
+                    const target = event.target;
+                    // هنا نضع منطق التحقق البسيط (كمثال)
+                    processMove();
+                    target.style.transform = 'translate(0px, 0px)';
+                    target.setAttribute('data-x', 0);
+                    target.setAttribute('data-y', 0);
+                }
+            }
+        });
+
+        function processMove() {
+            // إضافة نقاط وهمية للتجربة
+            score += 15;
+            document.getElementById('score').innerText = score;
+            saveScore(score);
+            checkLines();
+        }
+
+        // 3. خوارزمية المسح
+        function checkLines() {
+            // منطق مسح الصفوف والأعمدة يتم هنا برمجياً
+            // إذا اكتمل الصف، نحول الـ cells إلى اللون الأصلي ونضيف نقاط مضاعفة
+        }
+
+        // 4. حفظ البيانات في Firebase
+        async function saveScore(newScore) {
+            if (newScore > highScore) {
+                highScore = newScore;
+                document.getElementById('high-score').innerText = highScore;
+                
+                const data = {
+                    name: userName,
+                    score: highScore,
+                    timestamp: Date.now()
+                };
+
+                try {
+                    await fetch(`${DB_URL}/leaderboard/${userId}.json`, {
+                        method: 'PUT',
+                        body: JSON.stringify(data)
+                    });
+                } catch (e) { console.error("Firebase Error", e); }
+            }
+        }
+
+        // تحميل أعلى نتيجة عند البدء
+        async function loadHighScore() {
+            try {
+                const res = await fetch(`${DB_URL}/leaderboard/${userId}.json`);
+                const data = await res.json();
+                if (data) {
+                    highScore = data.score;
+                    document.getElementById('high-score').innerText = highScore;
+                }
+            } catch (e) { }
+        }
+
+        loadHighScore();
+        tg.ready();
+    </script>
+</body>
+</html>
