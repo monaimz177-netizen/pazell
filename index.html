@@ -1,114 +1,152 @@
 <!DOCTYPE html>
-<html lang="ar">
+<html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Block Blast Pro</title>
+    <title>Block Blast Fixed</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/interact.js/1.10.11/interact.min.js"></script>
     <style>
-        :root { --bg: #0f172a; --cell: #1e293b; --filled: #38bdf8; }
-        body { background: var(--bg); color: white; font-family: sans-serif; display: flex; flex-direction: column; align-items: center; margin: 0; touch-action: none; }
-        #score-container { margin: 20px; font-size: 24px; font-weight: bold; color: #fbbf24; }
-        .grid { display: grid; grid-template-columns: repeat(8, 40px); grid-template-rows: repeat(8, 40px); gap: 4px; background: #334155; padding: 10px; border-radius: 8px; }
-        .cell { width: 40px; height: 40px; background: var(--cell); border-radius: 4px; }
-        .cell.occupied { background: var(--filled); box-shadow: inset 0 0 8px rgba(0,0,0,0.5); }
-        #dock { display: flex; gap: 15px; margin-top: 30px; min-height: 120px; align-items: center; }
-        .piece { display: grid; grid-template-columns: repeat(3, 25px); gap: 2px; cursor: grab; }
-        .p-block { width: 25px; height: 25px; background: #fbbf24; border-radius: 3px; }
+        :root { --bg: #0f172a; --cell: #1e293b; --active: #38bdf8; --piece: #fbbf24; }
+        body { background: var(--bg); color: white; font-family: sans-serif; margin: 0; display: flex; flex-direction: column; align-items: center; touch-action: none; user-select: none; }
+        #stats { padding: 20px; font-size: 22px; font-weight: bold; }
+        .grid { display: grid; grid-template-columns: repeat(8, 45px); grid-template-rows: repeat(8, 45px); gap: 4px; background: #334155; padding: 10px; border-radius: 12px; }
+        .cell { width: 45px; height: 45px; background: var(--cell); border-radius: 4px; pointer-events: all; }
+        .cell.filled { background: var(--active); box-shadow: 0 0 10px var(--active); transition: 0.2s; }
+        #dock { display: flex; gap: 20px; margin-top: 30px; min-height: 120px; width: 100%; justify-content: center; }
+        .piece { display: grid; grid-template-columns: repeat(3, 30px); gap: 2px; cursor: grab; touch-action: none; }
+        .p-block { width: 30px; height: 30px; background: var(--piece); border-radius: 4px; pointer-events: none; }
     </style>
 </head>
 <body>
 
-    <div id="score-container">النتيجة: <span id="score">0</span></div>
+    <div id="stats">النقاط: <span id="score">0</span></div>
     <div class="grid" id="main-grid"></div>
     <div id="dock"></div>
 
     <script>
         let score = 0;
         const board = Array(8).fill().map(() => Array(8).fill(0));
-        const gridElement = document.getElementById('main-grid');
-
-        // 1. رسم الشبكة
-        function createGrid() {
-            gridElement.innerHTML = '';
-            for(let r=0; r<8; r++) {
-                for(let c=0; c<8; c++) {
-                    const cell = document.createElement('div');
-                    cell.className = 'cell' + (board[r][c] ? ' occupied' : '');
-                    cell.id = `cell-${r}-${c}`;
-                    gridElement.appendChild(cell);
-                }
-            }
-        }
-
-        // 2. أشكال القطع (مصفوفات إحداثيات)
         const SHAPES = [
-            [[0,0], [0,1], [1,0], [1,1]], // مربع
-            [[0,0], [1,0], [2,0]],         // خط عمودي
-            [[0,0], [0,1], [0,2]],         // خط أفقي
-            [[0,0], [1,0], [1,1]]          // زاوية
+            { s: [[0,0], [0,1], [1,0], [1,1]] }, // مربع
+            { s: [[0,0], [1,0], [2,0]] },         // خط عمودي
+            { s: [[0,0], [0,1], [0,2]] },         // خط أفقي
+            { s: [[0,0], [1,0], [0,1]] }          // زاوية
         ];
 
-        function spawnPieces() {
+        function init() {
+            const grid = document.getElementById('main-grid');
+            grid.innerHTML = '';
+            for(let r=0; r<8; r++) {
+                for(let c=0; c<8; c++) {
+                    const div = document.createElement('div');
+                    div.className = 'cell';
+                    div.dataset.r = r; div.dataset.c = c;
+                    div.id = `c-${r}-${c}`;
+                    grid.appendChild(div);
+                }
+            }
+            spawn();
+        }
+
+        function spawn() {
             const dock = document.getElementById('dock');
             dock.innerHTML = '';
             for(let i=0; i<3; i++) {
-                const shape = SHAPES[Math.floor(Math.random() * SHAPES.length)];
+                const shapeObj = SHAPES[Math.floor(Math.random()*SHAPES.length)];
                 const p = document.createElement('div');
                 p.className = 'piece';
-                p.dataset.shape = JSON.stringify(shape);
-                shape.forEach(box => {
-                    const b = document.createElement('div');
-                    b.className = 'p-block';
-                    b.style.gridColumnStart = box[1] + 1;
-                    b.style.gridRowStart = box[0] + 1;
-                    p.appendChild(b);
+                p.dataset.shape = JSON.stringify(shapeObj.s);
+                shapeObj.s.forEach(b => {
+                    const block = document.createElement('div');
+                    block.className = 'p-block';
+                    block.style.gridRowStart = b[0]+1; block.style.gridColumnStart = b[1]+1;
+                    p.appendChild(block);
                 });
                 dock.appendChild(p);
             }
-            setupDraggable();
+            makeDraggable();
         }
 
-        function setupDraggable() {
+        function makeDraggable() {
             interact('.piece').draggable({
                 listeners: {
                     move(event) {
                         const t = event.target;
-                        const x = (parseFloat(t.getAttribute('data-x')) || 0) + event.dx;
-                        const y = (parseFloat(t.getAttribute('data-y')) || 0) + event.dy;
-                        t.style.transform = `translate(${x}px, ${y}px) scale(1.3)`;
-                        t.setAttribute('data-x', x); t.setAttribute('data-y', y);
+                        const x = (parseFloat(t.dataset.x) || 0) + event.dx;
+                        const y = (parseFloat(t.dataset.y) || 0) + event.dy;
+                        t.style.transform = `translate(${x}px, ${y}px) scale(1.2)`;
+                        t.dataset.x = x; t.dataset.y = y;
                     },
                     end(event) {
-                        handleDrop(event);
+                        attemptPlace(event.target);
                     }
                 }
             });
         }
 
-        function handleDrop(event) {
-            const t = event.target;
-            const shape = JSON.parse(t.dataset.shape);
+        function attemptPlace(p) {
+            const shape = JSON.parse(p.dataset.shape);
+            // البحث عن الخلية التي يقع فوقها مركز القطعة
+            const rect = p.getBoundingClientRect();
+            const centerX = rect.left + (rect.width / 2);
+            const centerY = rect.top + (rect.height / 2);
             
-            // حساب أقرب خلية (بشكل مبسط للتجربة)
-            // في النسخة الاحترافية نستخدم getBoundingClientRect
-            // هنا سنحاكي النجاح لزيادة النقاط وتثبيت المربعات
+            const target = document.elementFromPoint(centerX, centerY);
             
-            let canPlace = true; // سنفترض دائماً النجاح حالياً للتجربة
-            
-            if(canPlace) {
-                score += 10;
-                document.getElementById('score').innerText = score;
-                t.remove(); // حذف القطعة من الدوك
-                if(document.querySelectorAll('.piece').length === 0) spawnPieces();
+            if (target && target.classList.contains('cell')) {
+                const r = parseInt(target.dataset.r);
+                const c = parseInt(target.dataset.c);
+
+                // التحقق من إمكانية الوضع
+                let canFit = shape.every(([dr, dc]) => {
+                    let nr = r + dr; let nc = c + dc;
+                    return nr >= 0 && nr < 8 && nc >= 0 && nc < 8 && board[nr][nc] === 0;
+                });
+
+                if (canFit) {
+                    shape.forEach(([dr, dc]) => {
+                        board[r+dr][c+dc] = 1;
+                        document.getElementById(`c-${r+dr}-${c+dc}`).classList.add('filled');
+                    });
+                    p.remove();
+                    score += (shape.length * 10);
+                    document.getElementById('score').innerText = score;
+                    checkLines();
+                    if (document.querySelectorAll('.piece').length === 0) spawn();
+                    return;
+                }
             }
 
-            t.style.transform = 'translate(0px, 0px)';
-            t.setAttribute('data-x', 0); t.setAttribute('data-y', 0);
+            // إعادة القطعة لمكانها إذا لم تنجح
+            p.style.transform = 'translate(0,0)';
+            p.dataset.x = 0; p.dataset.y = 0;
         }
 
-        createGrid();
-        spawnPieces();
+        function checkLines() {
+            // مسح الصفوف
+            for(let r=0; r<8; r++) {
+                if(board[r].every(v => v === 1)) {
+                    board[r].fill(0);
+                    for(let c=0; c<8; c++) document.getElementById(`c-${r}-${c}`).classList.remove('filled');
+                    score += 100;
+                }
+            }
+            // مسح الأعمدة
+            for(let c=0; c<8; c++) {
+                let colFull = true;
+                for(let r=0; r<8; r++) { if(board[r][c] === 0) colFull = false; }
+                if(colFull) {
+                    for(let r=0; r<8; r++) {
+                        board[r][c] = 0;
+                        document.getElementById(`c-${r}-${c}`).classList.remove('filled');
+                    }
+                    score += 100;
+                }
+            }
+            document.getElementById('score').innerText = score;
+        }
+
+        init();
     </script>
 </body>
 </html>
